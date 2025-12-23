@@ -1,0 +1,26 @@
+﻿Employee Name,Manager Name
+Bill Lumbergh,
+Bob Slydell,Bill Lumbergh
+Bob Porter,Bill Lumbergh
+Linda M. Grayson,Bill Lumbergh
+Dom Portwood,Linda M. Grayson
+Wendy L. Hargrove,Linda M. Grayson
+Tom Smykowski,Linda M. Grayson
+Nathan R. Ross,Linda M. Grayson
+Peter Gibbons,Dom Portwood
+Cheryl T. Ackerman,Peter Gibbons
+Samir Nagheenanajar,Dom Portwood
+Michael Bolton,Samir Nagheenanajar
+Nathan C. Carter,Dom Portwood
+Lydia Bennett,Nathan C. Carter
+Greg S. Torres,Nathan C. Carter
+Alice L. Munroe,Nathan C. Carter
+Peggy Carlson,Wendy L. Hargrove
+Anne Martinez,Wendy L. Hargrove
+Fred Wilkinson,Wendy L. Hargrove
+Derek P. Phillips,Tom Smykowski
+Sarah J. Greene,Derek P. Phillips
+Alan B. Peterson,Nathan R. Ross
+Maria D. Sanchez,Alan B. Peterson
+Bobbie K. Jenkins,Alan B. Peterson
+Milton Waddams,Tom Smykowski
