@@ -13,6 +13,7 @@ dependencies = [
     "numpy>=2.4.0",
     "pandas>=2.3.3",
     "polars[pyarrow]>=1.36.1",
+    "scikit-learn>=1.8.0",
     "sqlglot[rs]>=28.5.0",
     "vegafusion>=2.0.3",
     "vl-convert-python>=1.8.0",
