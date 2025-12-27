@@ -10,3 +10,6 @@ __marimo__/
 
 # Virtual environments
 .venv
+
+# Data files to ignore
+flights.parquet
