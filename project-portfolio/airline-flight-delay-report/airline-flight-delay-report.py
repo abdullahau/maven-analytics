@@ -104,8 +104,64 @@ def _():
     return
 
 
+@app.cell
+def _(flights):
+    def multiselect_opt(data, column):
+        return mo.ui.multiselect(options=(
+            data
+            .select(column)
+            .unique()
+            .sort(column)
+            .collect()
+            .to_series()
+        ))
+
+    city_multiselect = multiselect_opt(flights, "CITY")
+    airline_multiselect = multiselect_opt(flights, "AIRLINE NAME")
+    dow_multiselect = multiselect_opt(flights, "DAY_OF_WEEK")
+    return airline_multiselect, city_multiselect, dow_multiselect
+
+
+@app.cell
+def _(city_multiselect):
+    mo.hstack([city_multiselect, mo.md(f"Selected Cities: {city_multiselect.value}")])
+    return
+
+
+@app.cell
+def _(airline_multiselect):
+    mo.hstack([airline_multiselect, mo.md(f"Selected Airlines: {airline_multiselect.value}")])
+    return
+
+
+@app.cell
+def _(dow_multiselect):
+    mo.hstack([dow_multiselect, mo.md(f"Selected Day of Week: {dow_multiselect.value}")])
+    return
+
+
 @app.function
-def filter_flight_data(
+def multiselect_filter_flight(
+    flight_data: pl.LazyFrame,
+    city_filter: list | None,
+    airline_filter: list | None,
+    dow_filter: list | None,
+) -> pl.LazyFrame:
+
+    if city_filter:
+        flight_data = flight_data.filter(pl.col("CITY").is_in(city_filter))
+
+    if airline_filter:
+        flight_data = flight_data.filter(pl.col("AIRLINE NAME").is_in(airline_filter))
+
+    if dow_filter:
+        flight_data = flight_data.filter(pl.col("DAY_OF_WEEK").is_in(dow_filter))
+
+    return flight_data
+
+
+@app.function
+def chart_filter_flight(
     flight_data: pl.LazyFrame,
     city_filter: Optional[pl.DataFrame] = None,
     airline_filter: Optional[pl.DataFrame] = None,
@@ -131,25 +187,36 @@ def filter_flight_data(
 
 
 @app.cell
-def _(
-    canceled_flights_week_chart,
-    flights,
-    flights_by_city_chart,
-    pct_delay_airline_chart,
-):
-    filtered_flights = filter_flight_data(
+def _(airline_multiselect, city_multiselect, dow_multiselect, flights):
+    filtered_flights = multiselect_filter_flight(
         flights,
-        city_filter=flights_by_city_chart.value,
-        airline_filter=pct_delay_airline_chart.value,
-        dow_filter=canceled_flights_week_chart.value
+        city_multiselect.value,
+        airline_multiselect.value,
+        dow_multiselect.value
     )
     return (filtered_flights,)
 
 
 @app.cell
-def _(filtered_flights):
+def _(
+    canceled_flights_week_chart,
+    filtered_flights,
+    flights_by_city_chart,
+    pct_delay_airline_chart,
+):
+    chart_filtered_flights = chart_filter_flight(
+        filtered_flights,
+        city_filter=flights_by_city_chart.value,
+        airline_filter=pct_delay_airline_chart.value,
+        dow_filter=canceled_flights_week_chart.value
+    )
+    return (chart_filtered_flights,)
+
+
+@app.cell
+def _(chart_filtered_flights):
     monthly_flights = (
-        filtered_flights
+        chart_filtered_flights
         .group_by("MONTH")
         .agg(
             pl.col("Status")
@@ -179,9 +246,9 @@ def _(filtered_flights):
 
 
 @app.cell
-def _(flights):
+def _(filtered_flights):
     flights_by_city = (
-        flights
+        filtered_flights
         .filter(pl.col("CITY").is_not_null())
         .group_by("CITY")
         .agg(total=pl.len())
@@ -193,9 +260,9 @@ def _(flights):
 
 
 @app.cell
-def _(flights):
+def _(filtered_flights):
     pct_delay_airline = (
-        flights
+        filtered_flights
         .group_by("AIRLINE NAME")
         .agg(
             pl.col("Status").len().alias("total"),
@@ -215,9 +282,9 @@ def _(flights):
 
 
 @app.cell
-def _(flights):
+def _(filtered_flights):
     canceled_flights_week_summary = (
-        flights
+        filtered_flights
         .filter(pl.col("Status") == "Canceled")
         .group_by("DAY_OF_WEEK")
         .agg(
@@ -233,9 +300,9 @@ def _(flights):
 
 
 @app.cell
-def _(filtered_flights):
+def _(chart_filtered_flights):
     canceled_flights_summary = (
-        filtered_flights
+        chart_filtered_flights
         .filter(pl.col("CANCELLATION_DESCRIPTION").is_not_null())
         .group_by("CANCELLATION_DESCRIPTION")
         .agg(
@@ -250,9 +317,9 @@ def _(filtered_flights):
 
 
 @app.cell
-def _(filtered_flights):
+def _(chart_filtered_flights):
     flight_status_summary = (
-        filtered_flights
+        chart_filtered_flights
         .group_by("Status")
         .agg(
             pl.len().alias("Total")
@@ -314,8 +381,8 @@ def human_format(n, decimals=1) -> str:
 
 
 @app.cell
-def _(filtered_flights):
-    kpis = compute_kpis(filtered_flights)
+def _(chart_filtered_flights):
+    kpis = compute_kpis(chart_filtered_flights)
     return (kpis,)
 
 
@@ -469,7 +536,7 @@ def _(flights_by_city):
                 alt.Tooltip("CITY", title="City"),
                 alt.Tooltip("total", title="Total Flights", format=",")
             ]
-        ).properties(height=470, width=250)
+        ).properties(height=450, width=250)
     )
     flights_by_city_chart
     return (flights_by_city_chart,)
@@ -488,7 +555,7 @@ def _(pct_delay_airline):
                 alt.Tooltip("AIRLINE NAME", title="Airline"),
                 alt.Tooltip("pct_delayed", title="% Delayed", format=".1%")
             ]
-        ).properties(height=470, width=210)
+        ).properties(height=450, width=210)
     )
     pct_delay_airline_chart
     return (pct_delay_airline_chart,)
