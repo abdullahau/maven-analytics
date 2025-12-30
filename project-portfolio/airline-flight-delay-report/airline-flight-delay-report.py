@@ -131,38 +131,17 @@ def filter_flight_data(
 
 
 @app.cell
-def _():
-    # filtered_city_value = flights_by_city_chart.value
-    # selected_cities = (
-    #     filtered_city_value if filtered_city_value is not None
-    #     else pl.DataFrame({"CITY": []})
-    # )
-    return
-
-
-@app.cell
-def _():
-    # value = pct_delay_airline_chart.value
-    # selected_airlines = (
-    #     value if value is not None
-    #     else pl.DataFrame({"CITY": []})
-    # )
-
-    # value = canceled_flights_week_chart.value
-    # selected_dow = (
-    #     value if value is not None
-    #     else pl.DataFrame({"CITY": []})
-    # )
-    return
-
-
-@app.cell
-def _(flights):
+def _(
+    canceled_flights_week_chart,
+    flights,
+    flights_by_city_chart,
+    pct_delay_airline_chart,
+):
     filtered_flights = filter_flight_data(
         flights,
-        # city_filter=selected_cities,
-        # airline_filter=selected_airlines,
-        # dow_filter=selected_dow
+        city_filter=flights_by_city_chart.value,
+        airline_filter=pct_delay_airline_chart.value,
+        dow_filter=canceled_flights_week_chart.value
     )
     return (filtered_flights,)
 
@@ -200,9 +179,9 @@ def _(filtered_flights):
 
 
 @app.cell
-def _(filtered_flights):
+def _(flights):
     flights_by_city = (
-        filtered_flights
+        flights
         .filter(pl.col("CITY").is_not_null())
         .group_by("CITY")
         .agg(total=pl.len())
@@ -214,19 +193,43 @@ def _(filtered_flights):
 
 
 @app.cell
-def _(filtered_flights):
-    flight_status_summary = (
-        filtered_flights
-        .group_by("Status")
+def _(flights):
+    pct_delay_airline = (
+        flights
+        .group_by("AIRLINE NAME")
         .agg(
-            pl.len().alias("Total")
+            pl.col("Status").len().alias("total"),
+            pl.col("Status")
+            .filter(pl.col("Status") == "Delayed")
+            .count()
+            .alias("delayed")
         )
         .with_columns(
-            (pl.col("Total") / pl.col("Total").sum()).alias("% of Total")
+            pct_delayed = pl.col("delayed") / pl.col("total")
         )
+        .sort("pct_delayed", descending=True)
+        .head(10)
         .collect()
     )
-    return (flight_status_summary,)
+    return (pct_delay_airline,)
+
+
+@app.cell
+def _(flights):
+    canceled_flights_week_summary = (
+        flights
+        .filter(pl.col("Status") == "Canceled")
+        .group_by("DAY_OF_WEEK")
+        .agg(
+            pl.col("Status").len().alias("canceled"),
+        )
+        .with_columns(
+            pct_total = pl.col("canceled") / pl.col("canceled").sum()
+        )
+        .sort("DAY_OF_WEEK")
+        .collect()
+    )
+    return (canceled_flights_week_summary,)
 
 
 @app.cell
@@ -248,42 +251,18 @@ def _(filtered_flights):
 
 @app.cell
 def _(filtered_flights):
-    pct_delay_airline = (
+    flight_status_summary = (
         filtered_flights
-        .group_by("AIRLINE NAME")
+        .group_by("Status")
         .agg(
-            pl.col("Status").len().alias("total"),
-            pl.col("Status")
-            .filter(pl.col("Status") == "Delayed")
-            .count()
-            .alias("delayed")
+            pl.len().alias("Total")
         )
         .with_columns(
-            pct_delayed = pl.col("delayed") / pl.col("total")
+            (pl.col("Total") / pl.col("Total").sum()).alias("% of Total")
         )
-        .sort("pct_delayed", descending=True)
-        .head(10)
         .collect()
     )
-    return (pct_delay_airline,)
-
-
-@app.cell
-def _(filtered_flights):
-    canceled_flights_week_summary = (
-        filtered_flights
-        .filter(pl.col("Status") == "Canceled")
-        .group_by("DAY_OF_WEEK")
-        .agg(
-            pl.col("Status").len().alias("canceled"),
-        )
-        .with_columns(
-            pct_total = pl.col("canceled") / pl.col("canceled").sum()
-        )
-        .sort("DAY_OF_WEEK")
-        .collect()
-    )
-    return (canceled_flights_week_summary,)
+    return (flight_status_summary,)
 
 
 @app.cell(hide_code=True)
@@ -493,7 +472,7 @@ def _(flights_by_city):
         ).properties(height=470, width=250)
     )
     flights_by_city_chart
-    return
+    return (flights_by_city_chart,)
 
 
 @app.cell
@@ -512,7 +491,7 @@ def _(pct_delay_airline):
         ).properties(height=470, width=210)
     )
     pct_delay_airline_chart
-    return
+    return (pct_delay_airline_chart,)
 
 
 @app.cell
@@ -554,7 +533,7 @@ def _(canceled_flights_week_summary):
         ) .properties(height=220, width=350)
     )
     canceled_flights_week_chart
-    return
+    return (canceled_flights_week_chart,)
 
 
 @app.cell
