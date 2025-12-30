@@ -6,14 +6,14 @@ app = marimo.App(
     layout_file="layouts/toy-store-kpi-report.grid.json",
 )
 
-with app.setup:
+with app.setup(hide_code=True):
     import marimo as mo
     import polars as pl
     import altair as alt
     from pathlib import Path
 
 
-@app.function
+@app.function(hide_code=True)
 @alt.theme.register("marimo_light", enable=True)
 def marimo_light():
     return {
