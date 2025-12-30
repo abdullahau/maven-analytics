@@ -141,81 +141,62 @@ def _(dow_multiselect):
 
 
 @app.function
-def multiselect_filter_flight(
-    flight_data: pl.LazyFrame,
-    city_filter: list | None,
-    airline_filter: list | None,
-    dow_filter: list | None,
+def apply_filters(
+    flights: pl.LazyFrame,
+    cities: list[str] | None = None,
+    airlines: list[str] | None = None,
+    days: list[int] | None = None,
 ) -> pl.LazyFrame:
 
-    if city_filter:
-        flight_data = flight_data.filter(pl.col("CITY").is_in(city_filter))
+    if cities:
+        flights = flights.filter(pl.col("CITY").is_in(cities))
 
-    if airline_filter:
-        flight_data = flight_data.filter(pl.col("AIRLINE NAME").is_in(airline_filter))
+    if airlines:
+        flights = flights.filter(pl.col("AIRLINE NAME").is_in(airlines))
 
-    if dow_filter:
-        flight_data = flight_data.filter(pl.col("DAY_OF_WEEK").is_in(dow_filter))
+    if days:
+        flights = flights.filter(pl.col("DAY_OF_WEEK").is_in(days))
 
-    return flight_data
+    return flights
 
 
 @app.function
-def chart_filter_flight(
-    flight_data: pl.LazyFrame,
-    city_filter: Optional[pl.DataFrame] = None,
-    airline_filter: Optional[pl.DataFrame] = None,
-    dow_filter: Optional[pl.DataFrame] = None,
-) -> pl.LazyFrame:
-
-    if city_filter is not None:
-        cities = city_filter.get_column("CITY").to_list()
-        if cities:
-            flight_data = flight_data.filter(pl.col("CITY").is_in(cities))
-
-    if airline_filter is not None:
-        airlines = airline_filter.get_column("AIRLINE NAME").to_list()
-        if airlines:
-            flight_data = flight_data.filter(pl.col("AIRLINE NAME").is_in(airlines))
-
-    if dow_filter is not None:
-        days = dow_filter.get_column("DAY_OF_WEEK").to_list()
-        if days:
-            flight_data = flight_data.filter(pl.col("DAY_OF_WEEK").is_in(days))
-
-    return flight_data
+def selection_to_list(selection, column: str) -> list:
+    if selection is None:
+        return []
+    return selection.get_column(column).to_list()
 
 
 @app.cell
 def _(airline_multiselect, city_multiselect, dow_multiselect, flights):
-    filtered_flights = multiselect_filter_flight(
+    flights_filtered = apply_filters(
         flights,
-        city_multiselect.value,
-        airline_multiselect.value,
-        dow_multiselect.value
+        cities=city_multiselect.value,
+        airlines=airline_multiselect.value,
+        days=dow_multiselect.value
     )
-    return (filtered_flights,)
+    return (flights_filtered,)
 
 
 @app.cell
 def _(
-    canceled_flights_week_chart,
-    filtered_flights,
-    flights_by_city_chart,
-    pct_delay_airline_chart,
+    airline_delay_rates_chart,
+    cancellations_by_weekday_chart,
+    city_flight_counts_chart,
+    flights_filtered,
 ):
-    chart_filtered_flights = chart_filter_flight(
-        filtered_flights,
-        city_filter=flights_by_city_chart.value,
-        airline_filter=pct_delay_airline_chart.value,
-        dow_filter=canceled_flights_week_chart.value
+    chart_filtered_flights = apply_filters(
+        flights_filtered,
+        cities=selection_to_list(city_flight_counts_chart.value, "CITY"),
+        airlines=selection_to_list(airline_delay_rates_chart.value, "AIRLINE NAME"),
+        days=selection_to_list(cancellations_by_weekday_chart.value, "DAY_OF_WEEK")
     )
     return (chart_filtered_flights,)
 
 
 @app.cell
 def _(chart_filtered_flights):
-    monthly_flights = (
+    monthly_status_counts = (
         chart_filtered_flights
         .group_by("MONTH")
         .agg(
@@ -242,13 +223,13 @@ def _(chart_filtered_flights):
         .sort("MONTH", descending=False)
         .collect()
     )
-    return (monthly_flights,)
+    return (monthly_status_counts,)
 
 
 @app.cell
-def _(filtered_flights):
-    flights_by_city = (
-        filtered_flights
+def _(flights_filtered):
+    city_flight_counts = (
+        flights_filtered
         .filter(pl.col("CITY").is_not_null())
         .group_by("CITY")
         .agg(total=pl.len())
@@ -256,13 +237,13 @@ def _(filtered_flights):
         .head(10)
         .collect()
     )
-    return (flights_by_city,)
+    return (city_flight_counts,)
 
 
 @app.cell
-def _(filtered_flights):
-    pct_delay_airline = (
-        filtered_flights
+def _(flights_filtered):
+    airline_delay_rates = (
+        flights_filtered
         .group_by("AIRLINE NAME")
         .agg(
             pl.col("Status").len().alias("total"),
@@ -278,13 +259,13 @@ def _(filtered_flights):
         .head(10)
         .collect()
     )
-    return (pct_delay_airline,)
+    return (airline_delay_rates,)
 
 
 @app.cell
-def _(filtered_flights):
-    canceled_flights_week_summary = (
-        filtered_flights
+def _(flights_filtered):
+    cancellations_by_weekday = (
+        flights_filtered
         .filter(pl.col("Status") == "Canceled")
         .group_by("DAY_OF_WEEK")
         .agg(
@@ -296,7 +277,7 @@ def _(filtered_flights):
         .sort("DAY_OF_WEEK")
         .collect()
     )
-    return (canceled_flights_week_summary,)
+    return (cancellations_by_weekday,)
 
 
 @app.cell
@@ -318,7 +299,7 @@ def _(chart_filtered_flights):
 
 @app.cell
 def _(chart_filtered_flights):
-    flight_status_summary = (
+    status_share = (
         chart_filtered_flights
         .group_by("Status")
         .agg(
@@ -329,7 +310,7 @@ def _(chart_filtered_flights):
         )
         .collect()
     )
-    return (flight_status_summary,)
+    return (status_share,)
 
 
 @app.cell(hide_code=True)
@@ -503,30 +484,30 @@ def monthly_trendline_chart(data, field, relative_field):
 
 
 @app.cell
-def _(monthly_flights):
-    total_chart = monthly_trendline_chart(monthly_flights, "total", "pct_ontime")
+def _(monthly_status_counts):
+    total_chart = monthly_trendline_chart(monthly_status_counts, "total", "pct_ontime")
     mo.ui.altair_chart(total_chart)
     return
 
 
 @app.cell
-def _(monthly_flights):
-    delayed_chart = monthly_trendline_chart(monthly_flights, "delayed", "pct_delayed")
+def _(monthly_status_counts):
+    delayed_chart = monthly_trendline_chart(monthly_status_counts, "delayed", "pct_delayed")
     mo.ui.altair_chart(delayed_chart)
     return
 
 
 @app.cell
-def _(monthly_flights):
-    canceled_chart = monthly_trendline_chart(monthly_flights, "canceled", "pct_canceled")
+def _(monthly_status_counts):
+    canceled_chart = monthly_trendline_chart(monthly_status_counts, "canceled", "pct_canceled")
     mo.ui.altair_chart(canceled_chart)
     return
 
 
 @app.cell
-def _(flights_by_city):
-    flights_by_city_chart = mo.ui.altair_chart(
-        alt.Chart(flights_by_city)
+def _(city_flight_counts):
+    city_flight_counts_chart = mo.ui.altair_chart(
+        alt.Chart(city_flight_counts)
         .mark_bar()
         .encode(
             alt.X("total", axis=alt.Axis(title="")),
@@ -538,14 +519,14 @@ def _(flights_by_city):
             ]
         ).properties(height=450, width=250)
     )
-    flights_by_city_chart
-    return (flights_by_city_chart,)
+    city_flight_counts_chart
+    return (city_flight_counts_chart,)
 
 
 @app.cell
-def _(pct_delay_airline):
-    pct_delay_airline_chart = mo.ui.altair_chart(
-        alt.Chart(pct_delay_airline)
+def _(airline_delay_rates):
+    airline_delay_rates_chart = mo.ui.altair_chart(
+        alt.Chart(airline_delay_rates)
         .mark_bar()
         .encode(
             alt.X("pct_delayed", axis=alt.Axis(title="")),
@@ -557,8 +538,8 @@ def _(pct_delay_airline):
             ]
         ).properties(height=450, width=210)
     )
-    pct_delay_airline_chart
-    return (pct_delay_airline_chart,)
+    airline_delay_rates_chart
+    return (airline_delay_rates_chart,)
 
 
 @app.cell
@@ -584,9 +565,9 @@ def _(canceled_flights_summary, chart_color_palette):
 
 
 @app.cell
-def _(canceled_flights_week_summary):
-    canceled_flights_week_chart = mo.ui.altair_chart(
-        alt.Chart(canceled_flights_week_summary)
+def _(cancellations_by_weekday):
+    cancellations_by_weekday_chart = mo.ui.altair_chart(
+        alt.Chart(cancellations_by_weekday)
         .mark_bar()
         .encode(
             alt.X("DAY_OF_WEEK:O", axis=alt.Axis(title="")),
@@ -599,13 +580,13 @@ def _(canceled_flights_week_summary):
             ]
         ) .properties(height=220, width=350)
     )
-    canceled_flights_week_chart
-    return (canceled_flights_week_chart,)
+    cancellations_by_weekday_chart
+    return (cancellations_by_weekday_chart,)
 
 
 @app.cell
-def _(chart_color_palette, flight_status_summary):
-    alt.Chart(flight_status_summary).mark_bar().encode(
+def _(chart_color_palette, status_share):
+    alt.Chart(status_share).mark_bar().encode(
         x=alt.X(
             "% of Total:Q",
             stack="normalize",
